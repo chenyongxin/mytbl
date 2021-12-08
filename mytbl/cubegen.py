@@ -98,6 +98,20 @@ class Array:
             raise TypeError("Should append a Cube object.")
         self.__cubes.append(cube)       
         
+    def merge(self, bArray):
+        """
+        Merge another array of cube/cuboids (bArray) to the current array.
+        """
+        assert(isinstance(bArray, Array))
+        for i in range(len(bArray.__cubes)):
+            self.__cubes.append(bArray.__cubes[i])
+        
+    def pop(self, i):
+        """
+        Pop out ith cube in the array.
+        """
+        self.__cubes.pop(i)
+        
     def write_txt(self, fname):
         """
         Write info of array of cube/cuboids to a file.

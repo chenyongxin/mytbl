@@ -93,8 +93,8 @@ def field_horizontal_phase_average(a, x, y, z, px=1, py=1):
     -------
     Grid: tuple
         A tuple of 3 axes components.
-    data: vtk data
-
+    data: 3D array
+        Phase averaged data.
     """
     onx, ony, onz = x.size, y.size, z.size      # original grid size
     xx, yy, zz = x.copy(), y.copy(), z.copy()   # get original grid
