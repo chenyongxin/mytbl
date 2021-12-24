@@ -120,6 +120,50 @@ def field_horizontal_phase_average(a, x, y, z, px=1, py=1):
     
     return (xx, yy, zz), average
   
+def field_horizontal_tile(a, x, y, z, px=1, py=1):
+    """
+    Tile a field a in horizontal direction. The field a can be from phased
+    averaged result. It is recommended to use cell centered result. 
+    
+    Parameters
+    ----------
+    a : 3D array
+        Field.
+    x,y,z : 1D array
+        Axes. It is assumed that x, y, z are well translated, i.e. from 0 for 
+        vertex centered data and Delta/2 for cell centered data.
+    px : int, optional
+        Number of parts in x. The default is 1.
+    py : int, optional
+        Number of parts in y. The default is 1.
+
+    Returns
+    -------
+    Grid: tuple
+        A tuple of 3 axes components.
+    data: 3D array
+        Tiled data.
+
+    """
+    # Make grid
+    nx, ny, nz = x.size, y.size, z.size
+    lx = x[-1]+x[0]
+    ly = y[-1]+y[0]
+    xx = np.zeros(nx*px)
+    yy = np.zeros(ny*py)
+    for i in range(px):
+        xx[i*nx:(i+1)*nx] = lx*i + x
+    for i in range(py):
+        yy[i*ny:(i+1)*ny] = ly*i + y
+    zz = z.copy()
+    
+    # Make field
+    f = np.zeros((nx*px, ny*py, nz))
+    for i in range(px):
+        for j in range(py):
+            f[i*nx:(i+1)*nx, j*ny:(j+1)*ny] = a
+    return (xx, yy, zz), f
+    
 
 def get_velgrad(u, v, w, x, y, z):
     """
@@ -178,3 +222,59 @@ def get_velgrad(u, v, w, x, y, z):
             velgrad[i, j, :, :, :] = derivate(du[i*3+j], dx[j], j)
     
     return velgrad    
+
+def get_nusgs(u, v, w, x, y, z, C=0.1):
+    """
+    Compute eddy viscosity using velocity and grid information and Vreman model.
+    x, y, z are vertex centered coordinate, while eddy viscosity is stored in 
+    the cell center.
+    
+    Parameters
+    ----------
+    u,v,w: 3D array
+        Fields
+    x,y,z: 1D array
+        Axes
+    C: scalar, optional
+        Vreman model coefficient. Default value is 0.1.
+        
+    Returns
+    -------
+    nu_sgs: 3D array
+        Eddy viscosity.
+    """
+    # Grid info
+    nx, ny, nz = x.size, y.size, z.size
+    
+    # Get grid spacing
+    dx = x[1:]-x[:-1]
+    dy = y[1:]-y[:-1]
+    dz = z[1:]-z[:-1]
+    dx2 = np.zeros((nx-1, ny-1, nz-1))
+    dy2 = np.zeros((nx-1, ny-1, nz-1))
+    dz2 = np.zeros((nx-1, ny-1, nz-1))
+    for i in range(nx-1):
+        dx2[i, :, :] = dx[i]**2
+    for j in range(ny-1):
+        dy2[:, j, :] = dy[j]**2
+    for k in range(nz-1):
+        dz2[:, :, k] = dz[k]**2
+    
+    # Get velocity gradient tensor
+    grad = get_velgrad(u, v, w, x, y, z)
+    
+    a = np.transpose(grad, (1,0,2,3,4))
+    b = np.zeros_like(a)
+    for j in range(3):
+        for i in range(3):
+            b[i, j, :, :, :] += dx2 * a[0, i, :, :, :] * a[0, j, :, :, :] + \
+                                dy2 * a[1, i, :, :, :] * a[1, j, :, :, :] + \
+                                dz2 * a[2, i, :, :, :] * a[2, j, :, :, :]
+    
+    bb = b[0, 0, :, :, :] * b[1, 1, :, :, :] - b[0, 1, :, :, :]*b[0, 1, :, :, :] + \
+         b[0, 0, :, :, :] * b[2, 2, :, :, :] - b[0, 2, :, :, :]*b[0, 2, :, :, :] + \
+         b[1, 1, :, :, :] * b[2, 2, :, :, :] - b[1, 2, :, :, :]*b[1, 2, :, :, :]
+    
+    aa = np.einsum("ijklm, ijklm -> klm", a, a)
+    ed = C * np.sqrt(np.divide(bb, aa, out=np.zeros_like(aa), where=aa!=0))
+    return ed
