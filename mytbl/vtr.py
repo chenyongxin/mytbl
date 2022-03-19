@@ -105,8 +105,7 @@ def read_vtr(vtr):
 
 def write_vtr(name, x, y, z, fields):
     """
-    Write rectilinear grid .vtr file in binary.    data = 
-
+    Write rectilinear grid .vtr file in binary.
 
     Parameters
     ----------

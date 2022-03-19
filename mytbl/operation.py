@@ -8,6 +8,10 @@ Data operation.
 
 import numpy as np
 
+def nearest(x, x0):
+    """ Find the nearest index of list x to x0. """
+    return np.argmin(np.abs(x - x0))
+
 def clip_xyz_mask(x, y, z, normal, origin):
     """
     Clip axes and return clipped x, y, z masks.
@@ -222,6 +226,161 @@ def get_velgrad(u, v, w, x, y, z):
             velgrad[i, j, :, :, :] = derivate(du[i*3+j], dx[j], j)
     
     return velgrad    
+
+def cumulative_integrate(f, dx):
+    """
+    Compute cumulative stress along height: F(z) = \int_z^H f dx. 
+    Integrate f in the ascend order.
+    
+    Parameters
+    ----------
+    f: array
+        Function.
+    dx: array
+        Grid spacing.
+        
+    Returns
+    -------
+    r: array
+        Cumulative stress.
+    """
+    assert(f.size == dx.size)
+    r = np.zeros(f.size)
+    r[-1] = f[-1]*dx[-1]
+    for i in range(1, f.size):
+        r[-1-i] = r[-i] + f[-1-i]*dx[-1-i]
+    return r
+
+def mask_domain_cuboids_streamwise(cens, sides, x, y, z, direction=True):
+    """
+    Mask domain with 1 (or -1) in the first grid point outside the cube array, 
+    otherwise 0. Use this with care as one cannot use a cuboid that totally 
+    deattaches from the domain.
+
+    Parameters
+    ----------
+    cens : n-by-3 array
+        Coordinate of a cube array.
+    sides : n-by-3 array
+        Side lengths of a cube array.
+    x, y, z : 1D array
+        Grid.
+    direction : bool, optional
+        If true, multiply normal vector in the streamwise direction, which 
+        pointing to the fluid phase.
+    Returns
+    -------
+    a : 3D array
+        Mask array.
+    """
+    assert(cens.shape == sides.shape)
+    a = np.zeros((x.size, y.size, z.size))
+    
+    # Strategy: only change the vicinity of a cube
+    for cen, side in zip(cens, sides):
+        imin = nearest(x, cen[0]-side[0]/2)
+        imax = nearest(x, cen[0]+side[0]/2)
+        jmin = nearest(y, cen[1]-side[1]/2)
+        jmax = nearest(y, cen[1]+side[1]/2)
+        kmin = nearest(z, cen[2]-side[2]/2)
+        kmax = nearest(z, cen[2]+side[2]/2)
+        
+        one_neg = 1 if imin > 1        else 0
+        one_pos = 1 if imax < x.size-1 else 0
+        
+        neg = cen[0]-side[0]/2
+        pos = cen[0]+side[0]/2
+        
+        if x[0] <= neg and neg <= x[-1]:
+            # There is no big difference.
+            #a[imin-one_neg, jmin:jmax, kmin:kmax] = -1 if direction else 1  
+            a[imin, jmin:jmax, kmin:kmax] = -1 if direction else 1
+        if x[0] <= pos and pos <= x[-1]: 
+            #a[imax+one_pos, jmin:jmax, kmin:kmax] =  1
+            a[imax, jmin:jmax, kmin:kmax] =  1 
+    return a
+
+def mask_horizontal_domain_aligned_cuboid_array_wake(cens, sides, x, y):
+    """
+    Mask a horizontal domain (x-y plane) given an array of aligned cubes.
+    Return 1/True for the cube wake while 0/False for other points.
+
+    Parameters
+    ----------
+    cens : n-by-2 array
+        Coordinate of a cube array.
+    sides : n-by-2 array
+        Side lengths of a cube array.
+    x, y : 1D array
+        Grid.
+
+    Returns
+    -------
+    a : 2D array
+        Mask array.
+    """
+    assert(cens.shape == sides.shape)
+    a = np.zeros((x.size, y.size), dtype=bool)
+    
+    # Add strips
+    for cen, side in zip(cens, sides):
+        jmin = nearest(y, cen[1]-side[1]/2)
+        jmax = nearest(y, cen[1]+side[1]/2)
+        a[:, jmin:jmax] = 1
+    
+    # Exclude the cubes
+    for cen, side in zip(cens, sides):
+        imin = nearest(x, cen[0]-side[0]/2)
+        imax = nearest(x, cen[0]+side[0]/2)
+        jmin = nearest(y, cen[1]-side[1]/2)
+        jmax = nearest(y, cen[1]+side[1]/2)
+        
+        a[imin:imax+1, jmin:jmax+1] = 0 
+    return a
+
+
+def get_cube_pressure(cens, sides, x, y, z, p):
+    """
+    Get pressure force for a cube array in the streamwise direction.
+    f_D_i = -1/A_T \Sigma p_j n_i dy_j. 
+    Note here we should use cell centered pressure. 
+
+    Parameters
+    ----------
+    cens : n-by-3 array
+         Coordinate of a cube array.
+    sides : n-by-3 array
+        Side lengths of a cube array.
+    x, y, z : 1D array
+        Grid, vertex centered.
+    p : 3D array
+        Pressure field in cell center.
+    Returns
+    -------
+    a: 1D array
+        Pressure force of cube array along height.
+    """
+    assert(p.shape == (x.size-1, y.size-1, z.size-1))
+    a = np.zeros(z.size-1)
+    
+    # Total area
+    At = (x[-1]-x[0])*(y[-1]-y[0])
+    
+    # Cell center coordinate and make a mask (integral kernel)
+    xc = 0.5*(x[1:]+x[:-1])
+    yc = 0.5*(y[1:]+y[:-1])
+    zc = 0.5*(z[1:]+z[:-1])
+    dy = y[1:] - y[:-1]
+    kernel = mask_domain_cuboids_streamwise(cens, sides, xc, yc, zc, direction=True)
+    for j in range(kernel.shape[1]):
+        kernel[:,j,:] *= dy[j]           # line integration 
+    
+    # Integrate along height
+    for k in range(z.size-1):
+        a[k] = np.sum(p[:,:,k]*kernel[:,:,k])
+    a /= -At
+    return a 
+    
 
 def get_nusgs(u, v, w, x, y, z, C=0.1):
     """
