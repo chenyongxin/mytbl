@@ -133,7 +133,35 @@ class Array:
                 for i in range(3):
                     fh.write("{0:10.5e} ".format(cube.get_side()[i]))
                 fh.write('\n')
-                
+    
+    def get_cube(self, index):
+        """
+        Get a cube in the array.
+
+        Parameters
+        ----------
+        index: int
+            Index of cubes in the array.
+
+        Returns
+        -------
+        cube: obj
+            A cube object.
+        """
+        assert(index < len(self.__cubes))
+        return self.__cubes[index]
+    
+    def get_num(self):
+        """
+        Get number of cubes in the array.
+
+        Returns
+        -------
+        n: int
+            Number of cubes in the array.
+        """
+        return len(self.__cubes)
+    
     def write_stl(self, fname):
         """
         Write STL file.

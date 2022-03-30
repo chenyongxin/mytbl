@@ -12,6 +12,19 @@ def nearest(x, x0):
     """ Find the nearest index of list x to x0. """
     return np.argmin(np.abs(x - x0))
 
+def periodic_expand(a):
+    """
+    Expand a 3D field with one more grid in each direction with 
+    a periodic condition.
+    """
+    nx, ny, nz = a.shape
+    b = np.zeros((nx+1, ny+1, nz+1))
+    b[:-1, :-1, :-1] = a
+    b[-1, :, :] = b[0, :, :]
+    b[:, -1, :] = b[:, 0, :]
+    b[:, :, -1] = b[:, :, 0]
+    return b
+
 def clip_xyz_mask(x, y, z, normal, origin):
     """
     Clip axes and return clipped x, y, z masks.
