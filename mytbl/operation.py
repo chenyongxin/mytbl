@@ -25,6 +25,27 @@ def periodic_expand(a):
     b[:, :, -1] = b[:, :, 0]
     return b
 
+def periodic_expand_horizontal(a):
+    """
+    Expand a 3D field with one more grid in only horizontal directions. 
+    In the vertical direction, zero gradient boundary condition is used at top.
+ 
+    Parameters
+    ----------
+    a : 3D field
+    
+    Returns
+    -------
+    A 3D field with one more grid.
+    """
+    nx, ny, nz = a.shape
+    b = np.zeros((nx+1, ny+1, nz+1))
+    b[:-1, :-1, :-1] = a
+    b[-1, :, :] = b[0, :,  :]
+    b[:, -1, :] = b[:, 0,  :]
+    b[:, :, -1] = b[:, :, -2]
+    return b
+
 def clip_xyz_mask(x, y, z, normal, origin):
     """
     Clip axes and return clipped x, y, z masks.
